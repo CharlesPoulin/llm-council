@@ -10,7 +10,7 @@ import json
 import asyncio
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .council import run_full_council, generate_conversation_title, run_multi_round_debate
 
 app = FastAPI(title="LLM Council API")
 
@@ -147,21 +147,21 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
-            # Stage 1: Collect responses
+            # Run multi-round debate
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
-            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
+            debate_history, juge_synthesis = await run_multi_round_debate(request.content, num_rounds=3)
+            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': debate_history})}\n\n"
 
-            # Stage 2: Collect rankings
-            yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
-            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
+            # Skip stage2 (no rankings in debate system)
+            # Kept for frontend compatibility but send empty data
+            stage2_results = []
 
-            # Stage 3: Synthesize final answer
+            # Juge synthesis (as stage3)
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
-            yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
+            yield f"data: {json.dumps({'type': 'stage3_complete', 'data': juge_synthesis})}\n\n"
+
+            # Set stage3_result for storage
+            stage3_result = juge_synthesis
 
             # Wait for title generation if it was started
             if title_task:
@@ -172,9 +172,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             # Save complete assistant message
             storage.add_assistant_message(
                 conversation_id,
-                stage1_results,
-                stage2_results,
-                stage3_result
+                debate_history,  # Saved as stage1 for compatibility
+                stage2_results,  # Empty list
+                stage3_result    # Juge synthesis
             )
 
             # Send completion event

@@ -3,11 +3,39 @@
   border-color: #c8e6c8;
 }
 
+.stage3 .stage-description {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 15px;
+  line-height: 1.5;
+}
+
 .final-response {
   background: #ffffff;
   padding: 20px;
   border-radius: 6px;
   border: 1px solid #c8e6c8;
+}
+
+.juge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #c8e6c8;
+}
+
+.juge-header .role-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2d8a2d;
+}
+
+.juge-header .model-name {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
 }
 
 .chairman-label {
