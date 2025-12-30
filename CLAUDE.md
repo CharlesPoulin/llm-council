@@ -11,15 +11,18 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 ### Backend Structure (`backend/`)
 
 **`config.py`**
-- Contains `COUNCIL_MODELS` (list of OpenRouter model identifiers)
+- Contains `COUNCIL_MODELS` (list of Ollama model identifiers like "llama3.2:3b", "mistral:7b")
 - Contains `CHAIRMAN_MODEL` (model that synthesizes final answer)
-- Uses environment variable `OPENROUTER_API_KEY` from `.env`
+- Uses environment variable `OLLAMA_API_URL` from `.env` (defaults to http://localhost:11434/v1/chat/completions)
+- No API key required for local Ollama (set OPENROUTER_API_KEY to None for compatibility)
 - Backend runs on **port 8001** (NOT 8000 - user had another app on 8000)
 
-**`openrouter.py`**
-- `query_model()`: Single async model query
+**`openrouter.py`** (now adapted for Ollama)
+- `query_model()`: Single async model query to local Ollama server
+- Uses OpenAI-compatible API format (http://localhost:11434/v1/chat/completions)
 - `query_models_parallel()`: Parallel queries using `asyncio.gather()`
 - Returns dict with 'content' and optional 'reasoning_details'
+- No authentication required (local server)
 - Graceful degradation: returns None on failure, continues with successful responses
 
 **`council.py`** - The Core Logic
@@ -123,14 +126,18 @@ All backend modules use relative imports (e.g., `from .config import ...`) not a
 All ReactMarkdown components must be wrapped in `<div className="markdown-content">` for proper spacing. This class is defined globally in `index.css`.
 
 ### Model Configuration
-Models are hardcoded in `backend/config.py`. Chairman can be same or different from council members. The current default is Gemini as chairman per user preference.
+Models are hardcoded in `backend/config.py`. Chairman can be same or different from council members. All models must be pulled locally via `ollama pull <model-name>`. Use `ollama list` to see available models. The current defaults are:
+- Council: llama3.2:3b, mistral:7b, qwen2.5:7b, gemma2:9b
+- Chairman: llama3.1:8b
 
 ## Common Gotchas
 
-1. **Module Import Errors**: Always run backend as `python -m backend.main` from project root, not from backend directory
-2. **CORS Issues**: Frontend must match allowed origins in `main.py` CORS middleware
-3. **Ranking Parse Failures**: If models don't follow format, fallback regex extracts any "Response X" patterns in order
-4. **Missing Metadata**: Metadata is ephemeral (not persisted), only available in API responses
+1. **Ollama Not Running**: Ensure `ollama serve` is running before starting the backend. Check http://localhost:11434 is accessible.
+2. **Models Not Pulled**: If you get model errors, verify models are pulled with `ollama list`. Pull missing models with `ollama pull <model-name>`.
+3. **Module Import Errors**: Always run backend as `python -m backend.main` from project root, not from backend directory
+4. **CORS Issues**: Frontend must match allowed origins in `main.py` CORS middleware
+5. **Ranking Parse Failures**: If models don't follow format, fallback regex extracts any "Response X" patterns in order
+6. **Missing Metadata**: Metadata is ephemeral (not persisted), only available in API responses
 
 ## Future Enhancement Ideas
 
@@ -143,7 +150,16 @@ Models are hardcoded in `backend/config.py`. Chairman can be same or different f
 
 ## Testing Notes
 
-Use `test_openrouter.py` to verify API connectivity and test different model identifiers before adding to council. The script tests both streaming and non-streaming modes.
+To test Ollama connectivity:
+```bash
+# Test if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Test a specific model
+curl http://localhost:11434/api/generate -d '{"model": "llama3.2:3b", "prompt": "Hello", "stream": false}'
+```
+
+You can also use the legacy `test_openrouter.py` script if it exists, but it may need updates for Ollama compatibility.
 
 ## Data Flow Summary
 

@@ -1,4 +1,4 @@
-"""OpenRouter API client for making LLM requests."""
+"""Ollama API client for making LLM requests."""
 
 import httpx
 from typing import List, Dict, Any, Optional
@@ -11,10 +11,10 @@ async def query_model(
     timeout: float = 120.0
 ) -> Optional[Dict[str, Any]]:
     """
-    Query a single model via OpenRouter API.
+    Query a single model via Ollama API (OpenAI-compatible).
 
     Args:
-        model: OpenRouter model identifier (e.g., "openai/gpt-4o")
+        model: Ollama model identifier (e.g., "llama3.2:3b", "mistral:7b")
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
 
@@ -22,9 +22,12 @@ async def query_model(
         Response dict with 'content' and optional 'reasoning_details', or None if failed
     """
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
     }
+
+    # Only add Authorization header if API key is provided (for compatibility)
+    if OPENROUTER_API_KEY:
+        headers["Authorization"] = f"Bearer {OPENROUTER_API_KEY}"
 
     payload = {
         "model": model,
@@ -32,7 +35,9 @@ async def query_model(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        # Configure timeout explicitly for all operations
+        timeout_config = httpx.Timeout(timeout, connect=60.0)
+        async with httpx.AsyncClient(timeout=timeout_config) as client:
             response = await client.post(
                 OPENROUTER_API_URL,
                 headers=headers,
@@ -49,13 +54,16 @@ async def query_model(
             }
 
     except Exception as e:
-        print(f"Error querying model {model}: {e}")
+        import traceback
+        print(f"Error querying model {model}: {type(e).__name__}: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
         return None
 
 
 async def query_models_parallel(
     models: List[str],
-    messages: List[Dict[str, str]]
+    messages: List[Dict[str, str]],
+    timeout: float = 120.0
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
     Query multiple models in parallel.
@@ -63,6 +71,7 @@ async def query_models_parallel(
     Args:
         models: List of OpenRouter model identifiers
         messages: List of message dicts to send to each model
+        timeout: Request timeout in seconds
 
     Returns:
         Dict mapping model identifier to response dict (or None if failed)
@@ -70,7 +79,7 @@ async def query_models_parallel(
     import asyncio
 
     # Create tasks for all models
-    tasks = [query_model(model, messages) for model in models]
+    tasks = [query_model(model, messages, timeout=timeout) for model in models]
 
     # Wait for all to complete
     responses = await asyncio.gather(*tasks)

@@ -2,7 +2,7 @@
 
 ![llmcouncil](header.jpg)
 
-The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
+The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses **local LLMs via Ollama** to send your query to multiple models, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
 
 In a bit more detail, here is what happens when you submit a query:
 
@@ -16,7 +16,38 @@ This project was 99% vibe coded as a fun Saturday hack because I wanted to explo
 
 ## Setup
 
-### 1. Install Dependencies
+### 1. Install Ollama
+
+First, install Ollama to run local LLMs:
+
+```bash
+# On Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# On macOS
+brew install ollama
+
+# Or download from https://ollama.com/download
+```
+
+Start the Ollama server:
+```bash
+ollama serve
+```
+
+Pull some models for your council:
+```bash
+# Council members - pull 3-4 different models for variety
+ollama pull llama3.2:3b        # Fast, lightweight
+ollama pull mistral:7b         # Good reasoning
+ollama pull qwen2.5:7b         # Strong analytical
+ollama pull gemma2:9b          # Google's model
+
+# Chairman model - for synthesis
+ollama pull llama3.1:8b
+```
+
+### 2. Install Project Dependencies
 
 The project uses [uv](https://docs.astral.sh/uv/) for project management.
 
@@ -32,30 +63,22 @@ npm install
 cd ..
 ```
 
-### 2. Configure API Key
-
-Create a `.env` file in the project root:
-
-```bash
-OPENROUTER_API_KEY=sk-or-v1-...
-```
-
-Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purchase the credits you need, or sign up for automatic top up.
-
 ### 3. Configure Models (Optional)
 
-Edit `backend/config.py` to customize the council:
+Edit `backend/config.py` to customize which local models to use:
 
 ```python
 COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
+    "llama3.2:3b",
+    "mistral:7b",
+    "qwen2.5:7b",
+    "gemma2:9b",
 ]
 
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+CHAIRMAN_MODEL = "llama3.1:8b"
 ```
+
+You can use any models you've pulled with `ollama pull`. List available models with `ollama list`.
 
 ## Running the Application
 
@@ -81,7 +104,8 @@ Then open http://localhost:5173 in your browser.
 
 ## Tech Stack
 
-- **Backend:** FastAPI (Python 3.10+), async httpx, OpenRouter API
+- **Backend:** FastAPI (Python 3.10+), async httpx, Ollama API
 - **Frontend:** React + Vite, react-markdown for rendering
 - **Storage:** JSON files in `data/conversations/`
+- **LLM Runtime:** Ollama (local inference)
 - **Package Management:** uv for Python, npm for JavaScript
