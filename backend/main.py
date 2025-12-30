@@ -147,18 +147,124 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
+            # Collect progress events in a list
+            progress_events = []
+
+            # Define progress callback for streaming updates
+            async def progress_update(event):
+                progress_events.append(event)
+
             # Run multi-round debate
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            debate_history, juge_synthesis = await run_multi_round_debate(request.content, num_rounds=3)
+
+            # Import here to access debate internals
+            from .roles import get_stage1_roles, get_juge_role
+            from .openrouter import query_model
+            import time
+
+            debating_roles = get_stage1_roles()
+            juge = get_juge_role()
+            debate_history = []
+            num_rounds = 1
+
+            # Run debate with progress updates
+            for round_num in range(1, num_rounds + 1):
+                for role in debating_roles:
+                    # Notify querying start
+                    progress_data = {
+                        'type': 'model_progress',
+                        'data': {
+                            'stage': 'debate',
+                            'role_name': role.role_name,
+                            'model': role.model,
+                            'round': round_num,
+                            'status': 'querying'
+                        }
+                    }
+                    yield f"data: {json.dumps(progress_data)}\n\n"
+
+                    # Build context (simplified from council.py)
+                    from .council import _build_debate_context
+                    messages = _build_debate_context(request.content, role, debate_history, round_num, num_rounds)
+
+                    # Query model
+                    start_time = time.time()
+                    response = await query_model(role.model, messages, timeout=300.0)
+                    elapsed_time = time.time() - start_time
+
+                    if response is not None:
+                        debate_history.append({
+                            "round": round_num,
+                            "role_id": role.role_id,
+                            "role_name": role.role_name,
+                            "model": role.model,
+                            "message": response.get('content', ''),
+                            "elapsed_time": elapsed_time
+                        })
+
+                        # Notify completion
+                        progress_data = {
+                            'type': 'model_progress',
+                            'data': {
+                                'stage': 'debate',
+                                'role_name': role.role_name,
+                                'model': role.model,
+                                'round': round_num,
+                                'status': 'complete',
+                                'elapsed_time': elapsed_time
+                            }
+                        }
+                        yield f"data: {json.dumps(progress_data)}\n\n"
+
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': debate_history})}\n\n"
+
+            # Check if we have any responses before attempting synthesis
+            if not debate_history:
+                error_msg = (
+                    "No models responded successfully. Please ensure Ollama is running "
+                    "and models are available. Run 'ollama serve' to start Ollama."
+                )
+                yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+                return
+
+            # Juge synthesis
+            yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
+
+            progress_data = {
+                'type': 'model_progress',
+                'data': {
+                    'stage': 'synthesis',
+                    'role_name': juge.role_name,
+                    'model': juge.model,
+                    'status': 'querying'
+                }
+            }
+            yield f"data: {json.dumps(progress_data)}\n\n"
+
+            from .council import _juge_synthesize_debate
+            start_time = time.time()
+            juge_synthesis = await _juge_synthesize_debate(request.content, debate_history, juge)
+            elapsed_time = time.time() - start_time
+
+            # Add elapsed time to synthesis result
+            juge_synthesis['elapsed_time'] = elapsed_time
+
+            progress_data = {
+                'type': 'model_progress',
+                'data': {
+                    'stage': 'synthesis',
+                    'role_name': juge.role_name,
+                    'model': juge.model,
+                    'status': 'complete',
+                    'elapsed_time': elapsed_time
+                }
+            }
+            yield f"data: {json.dumps(progress_data)}\n\n"
+            yield f"data: {json.dumps({'type': 'stage3_complete', 'data': juge_synthesis})}\n\n"
 
             # Skip stage2 (no rankings in debate system)
             # Kept for frontend compatibility but send empty data
             stage2_results = []
-
-            # Juge synthesis (as stage3)
-            yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            yield f"data: {json.dumps({'type': 'stage3_complete', 'data': juge_synthesis})}\n\n"
 
             # Set stage3_result for storage
             stage3_result = juge_synthesis
@@ -167,7 +273,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
             if title_task:
                 title = await title_task
                 storage.update_conversation_title(conversation_id, title)
-                yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+                title_data = {'type': 'title_complete', 'data': {'title': title}}
+                yield f"data: {json.dumps(title_data)}\n\n"
 
             # Save complete assistant message
             storage.add_assistant_message(

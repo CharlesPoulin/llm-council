@@ -1,0 +1,116 @@
+.model-progress-container {
+  margin: 16px 0;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.model-progress-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.model-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.model-progress-item {
+  padding: 8px 12px;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+}
+
+.model-progress-item.querying {
+  border-color: #4a90e2;
+  background: #f0f7ff;
+}
+
+.model-progress-item.complete {
+  border-color: #c8e6c8;
+  background: #f0fff0;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.progress-role {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.progress-round {
+  font-size: 11px;
+  color: #666;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.progress-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e0e0e0;
+  border-top-color: #4a90e2;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-left: auto;
+}
+
+.progress-checkmark {
+  color: #2d8a2d;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.progress-model {
+  color: #666;
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+}
+
+.progress-time {
+  font-weight: 600;
+  color: #888;
+  min-width: 50px;
+  text-align: right;
+}
+
+.progress-time.live {
+  color: #4a90e2;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}

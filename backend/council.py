@@ -8,7 +8,8 @@ from .roles import get_stage1_roles, get_juge_role
 
 async def run_multi_round_debate(
     user_query: str,
-    num_rounds: int = 3
+    num_rounds: int = 3,
+    progress_callback = None
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Run a multi-round structured debate between council roles.
@@ -16,6 +17,7 @@ async def run_multi_round_debate(
     Args:
         user_query: The user's question
         num_rounds: Number of debate rounds (default 3)
+        progress_callback: Optional async function to call with progress updates
 
     Returns:
         Tuple of (debate_history, juge_synthesis)
@@ -40,8 +42,22 @@ async def run_multi_round_debate(
                 total_rounds=num_rounds
             )
 
+            # Notify progress callback before querying
+            if progress_callback:
+                await progress_callback({
+                    'stage': 'debate',
+                    'role_name': role.role_name,
+                    'role_id': role.role_id,
+                    'model': role.model,
+                    'round': round_num,
+                    'status': 'querying'
+                })
+
             # Query the model for this role
-            response = await query_model(role.model, messages, timeout=120.0)
+            import time
+            start_time = time.time()
+            response = await query_model(role.model, messages, timeout=300.0)
+            elapsed_time = time.time() - start_time
 
             if response is not None:
                 # Add this turn to debate history
@@ -50,14 +66,35 @@ async def run_multi_round_debate(
                     "role_id": role.role_id,
                     "role_name": role.role_name,
                     "model": role.model,
-                    "message": response.get('content', '')
+                    "message": response.get('content', ''),
+                    "elapsed_time": elapsed_time
                 })
 
+                # Notify progress callback after successful query
+                if progress_callback:
+                    await progress_callback({
+                        'stage': 'debate',
+                        'role_name': role.role_name,
+                        'role_id': role.role_id,
+                        'model': role.model,
+                        'round': round_num,
+                        'status': 'complete',
+                        'elapsed_time': elapsed_time
+                    })
+
     # After all rounds, Juge synthesizes the debate
+    # Check if we have any responses before attempting synthesis
+    if not debate_history:
+        raise ValueError(
+            "No models responded successfully. Please ensure Ollama is running "
+            "and models are available. Run 'ollama serve' to start Ollama."
+        )
+
     juge_synthesis = await _juge_synthesize_debate(
         user_query=user_query,
         debate_history=debate_history,
-        juge=juge
+        juge=juge,
+        progress_callback=progress_callback
     )
 
     return debate_history, juge_synthesis
@@ -128,7 +165,8 @@ Remember: Each role brings a different perspective. Engage with their arguments 
 async def _juge_synthesize_debate(
     user_query: str,
     debate_history: List[Dict[str, Any]],
-    juge
+    juge,
+    progress_callback = None
 ) -> Dict[str, Any]:
     """
     Juge synthesizes the entire debate into a final recommendation.
@@ -137,6 +175,7 @@ async def _juge_synthesize_debate(
         user_query: Original user question
         debate_history: Complete debate history
         juge: The Juge Role object
+        progress_callback: Optional async function to call with progress updates
 
     Returns:
         Dict with role info and synthesis
@@ -163,7 +202,20 @@ async def _juge_synthesize_debate(
         {"role": "user", "content": synthesis_prompt}
     ]
 
-    response = await query_model(juge.model, messages, timeout=180.0)
+    # Notify progress callback before querying
+    if progress_callback:
+        await progress_callback({
+            'stage': 'synthesis',
+            'role_name': juge.role_name,
+            'role_id': juge.role_id,
+            'model': juge.model,
+            'status': 'querying'
+        })
+
+    import time
+    start_time = time.time()
+    response = await query_model(juge.model, messages, timeout=300.0)
+    elapsed_time = time.time() - start_time
 
     if response is None:
         return {
@@ -173,11 +225,23 @@ async def _juge_synthesize_debate(
             "response": "Error: Unable to generate synthesis."
         }
 
+    # Notify progress callback after successful query
+    if progress_callback:
+        await progress_callback({
+            'stage': 'synthesis',
+            'role_name': juge.role_name,
+            'role_id': juge.role_id,
+            'model': juge.model,
+            'status': 'complete',
+            'elapsed_time': elapsed_time
+        })
+
     return {
         "role_id": juge.role_id,
         "role_name": juge.role_name,
         "model": juge.model,
-        "response": response.get('content', '')
+        "response": response.get('content', ''),
+        "elapsed_time": elapsed_time
     }
 
 
@@ -196,8 +260,8 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
         Tuple of (debate_history, [], juge_synthesis, metadata)
         Note: Second element is empty list (legacy stage2 placeholder)
     """
-    # Run the multi-round debate
-    debate_history, juge_synthesis = await run_multi_round_debate(user_query, num_rounds=3)
+    # Run the multi-round debate (reduced to 1 round for testing)
+    debate_history, juge_synthesis = await run_multi_round_debate(user_query, num_rounds=1)
 
     # For API compatibility, return debate_history as "stage1"
     # Empty list for "stage2" (no rankings in debate system)

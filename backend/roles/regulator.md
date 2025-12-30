@@ -1,7 +1,7 @@
 ---
 role_name: "Régulateur/Compliance"
 role_id: "regulator"
-model: "qwen2.5:7b"
+model: "llama3.2:3b"
 participates_in_stage1: true
 participates_in_stage2: true
 participates_in_stage3: false

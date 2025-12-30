@@ -1,7 +1,7 @@
 ---
 role_name: "Juge/Synthétiseur"
 role_id: "juge"
-model: "llama3.1:8b"
+model: "llama3.2:3b"
 participates_in_stage1: false
 participates_in_stage2: false
 participates_in_stage3: true

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
-import DebateRounds from './DebateRounds';
+import AgentMessage from './AgentMessage';
 import Stage3 from './Stage3';
+import ModelProgress from './ModelProgress';
 import './ChatInterface.css';
 
 export default function ChatInterface({
@@ -69,16 +70,26 @@ export default function ChatInterface({
                 </div>
               ) : (
                 <div className="assistant-message">
-                  <div className="message-label">Conseil LLM Adversarial</div>
+                  {/* Model Progress Tracker */}
+                  {msg.modelProgress && <ModelProgress modelProgress={msg.modelProgress} />}
 
-                  {/* Debate Rounds */}
+                  {/* Agent Messages - Group Chat Style */}
                   {msg.loading?.stage1 && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
-                      <span>Débat en cours: Les rôles argumentent en tours séquentiels...</span>
+                      <span>Débat en cours: Les agents argumentent...</span>
                     </div>
                   )}
-                  {msg.stage1 && <DebateRounds debateHistory={msg.stage1} />}
+
+                  {msg.stage1 && msg.stage1.map((turn, idx) => (
+                    <AgentMessage
+                      key={idx}
+                      roleName={turn.role_name}
+                      model={turn.model}
+                      message={turn.message}
+                      roundNumber={turn.round}
+                    />
+                  ))}
 
                   {/* Juge Synthesis */}
                   {msg.loading?.stage3 && (

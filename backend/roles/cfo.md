@@ -1,7 +1,7 @@
 ---
 role_name: "CFO/Analyste Financier"
 role_id: "cfo"
-model: "gemma2:9b"
+model: "llama3.2:3b"
 participates_in_stage1: true
 participates_in_stage2: true
 participates_in_stage3: false

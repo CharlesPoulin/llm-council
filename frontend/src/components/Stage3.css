@@ -1,53 +1,29 @@
-.stage3 {
-  background: #f0fff0;
-  border-color: #c8e6c8;
+.stage3-wrapper {
+  margin-top: 24px;
 }
 
-.stage3 .stage-description {
-  color: #666;
-  font-size: 14px;
-  margin-bottom: 15px;
-  line-height: 1.5;
-}
-
-.final-response {
-  background: #ffffff;
-  padding: 20px;
-  border-radius: 6px;
-  border: 1px solid #c8e6c8;
-}
-
-.juge-header {
+.stage3-divider {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #c8e6c8;
+  justify-content: center;
+  margin: 24px 0 16px 0;
+  position: relative;
 }
 
-.juge-header .role-name {
-  font-size: 18px;
-  font-weight: 600;
-  color: #2d8a2d;
+.stage3-divider::before,
+.stage3-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #d0d0d0, transparent);
 }
 
-.juge-header .model-name {
+.stage3-divider span {
+  padding: 0 16px;
   font-size: 13px;
-  color: #888;
-  font-style: italic;
-}
-
-.chairman-label {
-  color: #2d8a2d;
-  font-size: 12px;
-  font-family: monospace;
-  margin-bottom: 12px;
   font-weight: 600;
-}
-
-.final-text {
-  color: #333;
-  line-height: 1.7;
-  font-size: 15px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: #ffffff;
 }

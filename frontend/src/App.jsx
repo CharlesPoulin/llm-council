@@ -44,7 +44,7 @@ function App() {
     try {
       const newConv = await api.createConversation();
       setConversations([
-        { id: newConv.id, created_at: newConv.created_at, message_count: 0 },
+        { id: newConv.id, created_at: newConv.created_at, title: newConv.title, message_count: 0 },
         ...conversations,
       ]);
       setCurrentConversationId(newConv.id);
@@ -92,6 +92,37 @@ function App() {
       // Send message with streaming
       await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
         switch (eventType) {
+          case 'model_progress':
+            // Update the loading state with model progress info
+            setCurrentConversation((prev) => {
+              const messages = [...prev.messages];
+              const lastMsg = messages[messages.length - 1];
+              if (!lastMsg.modelProgress) {
+                lastMsg.modelProgress = {};
+              }
+
+              const progressData = event.data;
+              const key = `${progressData.stage}_${progressData.role_name || 'juge'}`;
+
+              if (progressData.status === 'querying') {
+                lastMsg.modelProgress[key] = {
+                  roleName: progressData.role_name,
+                  model: progressData.model,
+                  status: 'querying',
+                  startTime: Date.now(),
+                  round: progressData.round
+                };
+              } else if (progressData.status === 'complete') {
+                if (lastMsg.modelProgress[key]) {
+                  lastMsg.modelProgress[key].status = 'complete';
+                  lastMsg.modelProgress[key].elapsedTime = progressData.elapsed_time;
+                }
+              }
+
+              return { ...prev, messages };
+            });
+            break;
+
           case 'stage1_start':
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
