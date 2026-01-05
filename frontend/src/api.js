@@ -70,18 +70,24 @@ export const api = {
    * Send a message and receive streaming updates.
    * @param {string} conversationId - The conversation ID
    * @param {string} content - The message content
+   * @param {File[]} files - Optional array of files to attach
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, onEvent) {
+  async sendMessageStream(conversationId, content, files = [], onEvent) {
+    const formData = new FormData();
+    formData.append('content', content);
+
+    // Add files if any
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message/stream`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ content }),
+        body: formData,
       }
     );
 

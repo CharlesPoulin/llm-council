@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import AgentMessage from './AgentMessage';
 import Stage3 from './Stage3';
 import ModelProgress from './ModelProgress';
+import { downloadConversationReport, downloadConversationHTML } from '../utils/exportConversation';
 import './ChatInterface.css';
 
 export default function ChatInterface({
@@ -11,6 +12,8 @@ export default function ChatInterface({
   isLoading,
 }) {
   const [input, setInput] = useState('');
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -21,11 +24,24 @@ export default function ChatInterface({
     scrollToBottom();
   }, [conversation]);
 
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setSelectedFiles((prev) => [...prev, ...files]);
+  };
+
+  const handleRemoveFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
-      onSendMessage(input);
+      onSendMessage(input, selectedFiles);
       setInput('');
+      setSelectedFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -34,6 +50,16 @@ export default function ChatInterface({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e);
+    }
+  };
+
+  const handleExport = (format) => {
+    if (!conversation) return;
+
+    if (format === 'html') {
+      downloadConversationHTML(conversation);
+    } else {
+      downloadConversationReport(conversation, format);
     }
   };
 
@@ -50,6 +76,20 @@ export default function ChatInterface({
 
   return (
     <div className="chat-interface">
+      {conversation.messages.length > 0 && (
+        <div className="chat-header">
+          <h2 className="conversation-title">{conversation.title}</h2>
+          <div className="export-dropdown">
+            <button className="export-button" title="Export conversation">
+              📥 Export
+            </button>
+            <div className="export-menu">
+              <button onClick={() => handleExport('md')}>Markdown (.md)</button>
+              <button onClick={() => handleExport('html')}>HTML (.html)</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="messages-container">
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
@@ -115,8 +155,25 @@ export default function ChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      {conversation.messages.length === 0 && (
-        <form className="input-form" onSubmit={handleSubmit}>
+      <form className="input-form" onSubmit={handleSubmit}>
+        {selectedFiles.length > 0 && (
+          <div className="selected-files">
+            {selectedFiles.map((file, index) => (
+              <div key={index} className="file-chip">
+                <span className="file-name">{file.name}</span>
+                <button
+                  type="button"
+                  className="file-remove"
+                  onClick={() => handleRemoveFile(index)}
+                  aria-label="Remove file"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="input-row">
           <textarea
             className="message-input"
             placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
@@ -126,15 +183,29 @@ export default function ChatInterface({
             disabled={isLoading}
             rows={3}
           />
-          <button
-            type="submit"
-            className="send-button"
-            disabled={!input.trim() || isLoading}
-          >
-            Send
-          </button>
-        </form>
-      )}
+          <div className="input-actions">
+            <label className="file-upload-button" title="Attach documents">
+              📎
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.txt,.csv,.json,.xlsx,.xls"
+                onChange={handleFileSelect}
+                disabled={isLoading}
+                style={{ display: 'none' }}
+              />
+            </label>
+            <button
+              type="submit"
+              className="send-button"
+              disabled={!input.trim() || isLoading}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

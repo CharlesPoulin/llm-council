@@ -1,4 +1,5 @@
 import AgentMessage from './AgentMessage';
+import SynthesisDashboard from './SynthesisDashboard';
 import './Stage3.css';
 
 export default function Stage3({ finalResponse }) {
@@ -11,6 +12,11 @@ export default function Stage3({ finalResponse }) {
       <div className="stage3-divider">
         <span>Synthèse Finale</span>
       </div>
+
+      {/* Decision Analysis Dashboard */}
+      <SynthesisDashboard synthesis={{ message: finalResponse.response }} />
+
+      {/* Full Synthesis */}
       <AgentMessage
         roleName={finalResponse.role_name || 'Juge'}
         model={finalResponse.model}

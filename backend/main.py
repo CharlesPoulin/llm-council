@@ -1,10 +1,10 @@
 """FastAPI backend for LLM Council."""
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import uuid
 import json
 import asyncio
@@ -22,6 +22,86 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def extract_text_from_file(file: UploadFile) -> str:
+    """
+    Extract text content from uploaded file.
+    Supports: TXT, JSON, CSV, PDF, DOCX, XLSX
+    """
+    content = await file.read()
+    filename = file.filename.lower()
+
+    try:
+        # PDF files
+        if filename.endswith('.pdf'):
+            from pypdf import PdfReader
+            from io import BytesIO
+
+            pdf_reader = PdfReader(BytesIO(content))
+            text_parts = []
+            for page_num, page in enumerate(pdf_reader.pages, 1):
+                page_text = page.extract_text()
+                if page_text.strip():
+                    text_parts.append(f"[Page {page_num}]\n{page_text}")
+
+            extracted_text = "\n\n".join(text_parts)
+            return f"## File: {file.filename} (PDF, {len(pdf_reader.pages)} pages)\n```\n{extracted_text}\n```\n"
+
+        # DOCX files
+        elif filename.endswith('.docx'):
+            from docx import Document
+            from io import BytesIO
+
+            doc = Document(BytesIO(content))
+            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            extracted_text = "\n\n".join(paragraphs)
+            return f"## File: {file.filename} (Word Document)\n```\n{extracted_text}\n```\n"
+
+        # XLSX files
+        elif filename.endswith(('.xlsx', '.xls')):
+            from openpyxl import load_workbook
+            from io import BytesIO
+
+            wb = load_workbook(BytesIO(content), read_only=True)
+            sheet_texts = []
+
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                rows = []
+                for row in sheet.iter_rows(values_only=True):
+                    # Filter out empty rows
+                    row_data = [str(cell) if cell is not None else '' for cell in row]
+                    if any(cell.strip() for cell in row_data):
+                        rows.append(' | '.join(row_data))
+
+                if rows:
+                    sheet_text = f"### Sheet: {sheet_name}\n" + "\n".join(rows[:50])  # Limit to 50 rows
+                    if len(list(sheet.iter_rows())) > 50:
+                        sheet_text += f"\n... ({len(list(sheet.iter_rows())) - 50} more rows)"
+                    sheet_texts.append(sheet_text)
+
+            extracted_text = "\n\n".join(sheet_texts)
+            return f"## File: {file.filename} (Excel Spreadsheet)\n```\n{extracted_text}\n```\n"
+
+        # Text-based files (JSON, CSV, TXT, etc.)
+        else:
+            text = content.decode('utf-8')
+
+            if filename.endswith('.json'):
+                # Pretty print JSON
+                data = json.loads(text)
+                return f"## File: {file.filename} (JSON)\n```json\n{json.dumps(data, indent=2)}\n```\n"
+            elif filename.endswith('.csv'):
+                return f"## File: {file.filename} (CSV)\n```csv\n{text}\n```\n"
+            else:
+                # Plain text or other text-based formats
+                return f"## File: {file.filename} (Text)\n```\n{text}\n```\n"
+
+    except UnicodeDecodeError:
+        return f"## File: {file.filename}\n[Binary file - content not extractable as text]\n"
+    except Exception as e:
+        return f"## File: {file.filename}\n[Error reading file: {str(e)}]\n"
 
 
 class CreateConversationRequest(BaseModel):
@@ -124,10 +204,15 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
-async def send_message_stream(conversation_id: str, request: SendMessageRequest):
+async def send_message_stream(
+    conversation_id: str,
+    content: str = Form(...),
+    files: List[UploadFile] = File(default=[])
+):
     """
     Send a message and stream the 3-stage council process.
     Returns Server-Sent Events as each stage completes.
+    Supports file attachments for context.
     """
     # Check if conversation exists
     conversation = storage.get_conversation(conversation_id)
@@ -137,15 +222,33 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
 
+    # Extract text from uploaded files
+    file_context = ""
+    if files:
+        print(f"Processing {len(files)} uploaded file(s)...")
+        file_texts = []
+        for file in files:
+            print(f"  - Extracting text from: {file.filename}")
+            text = await extract_text_from_file(file)
+            file_texts.append(text)
+        if file_texts:
+            file_context = "\n\n## Attached Documents\n\n" + "\n\n".join(file_texts)
+            print(f"  ✓ Successfully extracted text from {len(file_texts)} file(s)")
+
+    # Combine user message with file context
+    full_content = content + file_context
+    if file_context:
+        print(f"  ✓ Context enhanced with {len(file_context)} characters from attachments")
+
     async def event_generator():
         try:
-            # Add user message
-            storage.add_user_message(conversation_id, request.content)
+            # Add user message (with file context if any)
+            storage.add_user_message(conversation_id, full_content)
 
             # Start title generation in parallel (don't await yet)
             title_task = None
             if is_first_message:
-                title_task = asyncio.create_task(generate_conversation_title(request.content))
+                title_task = asyncio.create_task(generate_conversation_title(content))
 
             # Collect progress events in a list
             progress_events = []
@@ -185,7 +288,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
                     # Build context (simplified from council.py)
                     from .council import _build_debate_context
-                    messages = _build_debate_context(request.content, role, debate_history, round_num, num_rounds)
+                    messages = _build_debate_context(full_content, role, debate_history, round_num, num_rounds)
 
                     # Query model
                     start_time = time.time()
@@ -243,7 +346,7 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             from .council import _juge_synthesize_debate
             start_time = time.time()
-            juge_synthesis = await _juge_synthesize_debate(request.content, debate_history, juge)
+            juge_synthesis = await _juge_synthesize_debate(full_content, debate_history, juge)
             elapsed_time = time.time() - start_time
 
             # Add elapsed time to synthesis result
